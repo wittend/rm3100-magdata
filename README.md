@@ -1,54 +1,49 @@
-# rm3100-runMag
-
+# rm3100-magdata (aka magdata)
+## Work in progress!
+## to be updated further!
 This is a program intended to assist in testing the PNI RM3100 geomagnetic sensor.
 
 The rm3100 support boards were developed for use with the Personal Space Weather Station (PSWS) TangerineSDR and Grape Space Weather monitors.  These board pairs report magnetic field strength as three independent vectors, from which a total field strength may be derived.  They also report the temperature in the immediate environment of the remotely placed sensor and at the near end of the pair as a fraction of a degree C.  They may also be used standalone with only a Pi or Pi clone board.  Various pieces of software have been used to develop, test, and run these boards as part of the hardware suite or as standalone low-cost monitors of the Earth's magnetic field.
 
 At one time or another, testers and developers of these boards have used utilities included in the Raspberry Pi OS I2Ctools package, ad hoc python scripts, and purpose-built programs written in C for their work.  All are possible.
 
-Currently the program code most used in this project is called **runMag**. 
+Currently the program code most used in this project is called **magdata**. 
 
-The utility **runMag** is a program intended to assist in testing the PNI RM3100 geomagnetic sensor.  
+The utility **magdata** is a program intended to assist in testing the PNI RM3100 geomagnetic sensor.  
 It is written in simple, portable C.
 
-* The **runMag** utility is written as a Linux command line program and takes all configuration parameters from its commandline. **runMag** has some built-in documentation that displays the command line options when a user types 'runMag -h' at a command prompt. It has a feature that reports the options understood by the program when the user types 'runMag -P' + the options used.
+* The **magdata** utility is written as a Linux command line program and takes all configuration parameters from its commandline. **magdata** may have some built-in documentation that displays the command line options when a user types 'magdata -h' at a command prompt. It has a feature that reports the options understood by the program when the user types 'magdata -P' + the options used.
 
 * As long as the Pi I2C kernel driver is activated (usually by configuring I2C I/O in the raspi-setup utility), no other library dependencies are required. 
-* **runMag** does not require any specialized software libraries that work only with boards created by the Raspberry Pi foundation.  
+* **magdata** does not require any specialized software libraries that work only with boards created by the Raspberry Pi foundation.  
 * It does not support RM3100 devices configured to require an SPI interface.  
 
-* This software was written to be used on boards such as the Raspberry Pi 3/4, Odroid, Nvidia Nano and their kin. It has been tested, if not thoroughly, on many similar single board designs. **runMag** was written with the expectation that the host provides the defacto standard 40 pin IO bus of Raspberry Pi 3's and their clones.
+* This software was written to be the Raspberry Pi 3/4 only, and will not work on similar boards (including the PI-5. It has been tested, if not thoroughly. **magdata** was written with the expectation that the host provides the defacto standard 40 pin IO bus of Raspberry Pi 3's and their clones.
 * While the code may build on desktop systems, its use makes no sense unless the I2C bus is accessible.
  
-* **runMag** uses Linux OS file handles to open, read, write, and close the device through the appropriate I2C bus.  
+* **magdata** uses Linux OS file handles to open, read, write, and close the device through the appropriate I2C bus.  
 The utility was written for maximum generality and should compile on any Linux host that supplies the standard GNU C compiler and build utilities.
 
-* **runMag** assumes that the I2C kernel drivers are installed, and that I2C bus names such as /dev/i2c-1, /dev/i2c-2, can be listed using ls. (The exact numbers vary depending on the device used).
+* **magdata**assumes that the I2C kernel drivers are installed, and that I2C bus names such as /dev/i2c-1, /dev/i2c-2, can be listed using ls. (The exact numbers vary depending on the device used).
 
 * The software allows reading almost all of the useful registers of the RM3100.  It also reads the MCP9808 (or equivalent) precision temperature sensors on both the local and remote components of the support board pair.
 
-* **runMag** concatenates each collected sample of data to a log file as an individual JSON object at 1s intervals. The software writes a log file to a specified location on the host system for collection and transfer to a data aggregation system. If no output file is configured, the output is written to the 'stdout', ordinarily the system console. **runMag** observes the current host's clock time and closes each day's log at 00:00:00 UTC and open's a new one for the next UTC day.
+* **magdata** concatenates each collected sample of data to a log file as an individual JSON object at 1s intervals. The software writes a log file to a specified location on the host system for collection and transfer to a data aggregation system. If no output file is configured, the output is written to the 'stdout', ordinarily the system console. **runMag** observes the current host's clock time and closes each day's log at 00:00:00 UTC and open's a new one for the next UTC day.
 
 
-The current pre-release code is 0.1.2
+The current pre-release code is 0.0.1
 
 Just clone this project into your home directory on the Raspberry Pi or board with similar bus using:
 
-    git clone https://github.com/wittend/rm3100-runMag.git
+    git clone https://github.com/wittend/rm3100-magdata.git
 
 Then do:
 
-    $ cd rm3100-runMag
+    $ cd rm3100-magdata 
     $ make
 
 
-and if all goes well type:
-
-    $ sudo ./runMag
-    (most flavors of Linux will require sudo)
-
-
-and now you should see some results!
+and now you may should see some results!
 
 ## Example on Raspberry Pi 3/4, using logging:
 
