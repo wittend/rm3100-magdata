@@ -1,0 +1,31 @@
+[
+    {
+        "latitude": "38.922178",
+        "longitude": "-92.298192",
+        "elevation": "222.0",
+        "sensor_type": "RM3100",
+        "b": "1",
+        "j": "true",
+        "k": "true",
+        "M": "23",
+        "A": "10",
+        "c": "400",
+        "Z": "true",
+        "S": "KD0EAG",
+        "software":
+        {
+           "name": "runMag",
+           "version": "0.1.1",
+           "compiled": "2022 MAR 13 10:0:13",
+           "I2C_bus": "1",
+           "I2C_addr": "23",
+           "JSON_output": "true",
+           "create_roll_logs": "true",
+           "NOS_reg_value": "10",
+           "cycle_count": "400",
+           "show_field_total": "true",
+           "site_prefix": "KD0EAG",
+        },
+        "Sponsor": "Dave Witten"
+   }
+]
