@@ -38,6 +38,7 @@
 #define _DEBUG          FALSE
 #define CONSOLE_OUTPUT  TRUE
 #define USE_WAITFOREDGE TRUE
+#define FOR_GRAPE2      TRUE
 
 //------------------------------------------
 // Macros and runtime options.
@@ -63,9 +64,11 @@ typedef struct tag_ctlList
     int pi;
 
     unsigned magHandle;
-    unsigned tempHandle;
+    unsigned localTempHandle;
+    unsigned remoteTempHandle;
 
     int  magnetometerAddr;
+    int  localTempAddr;
     int  remoteTempAddr;
 
     int  doBistMask;
@@ -112,9 +115,10 @@ int  initGPIO(volatile ctlList *p);
 void termGPIO(volatile ctlList *p);
 int  verifyMagSensor(volatile ctlList *p);
 int  initMagSensor(volatile ctlList *p);
-int  initTempSensor(volatile ctlList *p);
+int  initTempSensors(volatile ctlList *p);
 
-int  readTemp(volatile ctlList *p);
+int  readLocalTemp(volatile ctlList *p);
+int  readRemoteTemp(volatile ctlList *p);
 //int  readMagCMM(volatile ctlList *p);
 int  readMagPOLL(volatile ctlList *p);
 

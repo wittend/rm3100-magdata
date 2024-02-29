@@ -69,7 +69,8 @@ int main(int argc, char** argv)
 
     p->pi = 0;
     p->magHandle        = 0;
-    p->tempHandle       = 0;
+    p->localTempHandle  = 0;
+    p->remoteTempHandle = 0;
     p->doBistMask       = 0;
     p->cc_x             = CC_400;
     p->cc_y             = CC_400;
@@ -186,9 +187,8 @@ int main(int argc, char** argv)
     //-----------------------------------------
     //  Initialize the Temp sensor registers.
     //-----------------------------------------
-    if(initTempSensor(p))
+    if(initTempSensors(p))
     {
-//        fprintf(OUTPUT_ERROR, "[CHILD] Unable to initialize the temperature sensor.  Is sensor properly connected?\n");
         utcTime = getUTC();
         strftime(utcStr, UTCBUFLEN, "%d %b %Y %T", utcTime);
         fprintf(OUTPUT_ERROR, "    [CHILD] {ts: \"%s\", lastStatus: \"Unable to initialize the temperature sensor.\"}", utcStr); 
@@ -264,12 +264,11 @@ int main(int argc, char** argv)
         {
             utcTime = getUTC();
             strftime(utcStr, UTCBUFLEN, "%d %b %Y %T", utcTime);                // RFC 2822: "%a, %d %b %Y %T %z"      RFC 822: "%a, %d %b %y %T %z"
- #if(CONSOLE_OUTPUT)
+#if(CONSOLE_OUTPUT)
             fprintf(OUTPUT_PRINT, "   [CHILD]: {ts: \"%s\", lastStatus: \"Missed PPS Timeout!\"}", utcStr); 
             fflush(OUTPUT_PRINT);
 #else
             char outstr[MAXPATHBUFLEN] = "";
-//            fprintf(OUTPUT_PRINT, "   [CHILD]: {ts: \"%s\", lastStatus: \"Missed PPS Timeout!\"}", utcStr); 
             sprintf(outstr, "   [CHILD]: {ts: \"%s\", lastStatus: \"Missed PPS Timeout!\"}", utcStr); 
             write(PIPEOUT, outstr);
 #endif
@@ -286,6 +285,7 @@ int main(int argc, char** argv)
         }
 #endif
     }
+
     //-----------------------------------------
     //  Cleanup Callback, PIGPIO, and exit.
     //-----------------------------------------
@@ -306,8 +306,10 @@ char *formatOutput(volatile ctlList *p, char *outBuf)
     struct tm *utcTime = getUTC();
     char utcStr[128] ="";
     double xyz[3];
-    int temp = 0;
-    float rcTemp = 0.0;
+    int localTemp = 0;
+    int remoteTemp = 0;
+    float rcLocalTemp = 0.0;
+    float rcRemoteTemp = 0.0;
 
     strncpy(outBuf, "", 1);
 
@@ -316,48 +318,64 @@ char *formatOutput(volatile ctlList *p, char *outBuf)
     fflush(OUTPUT_PRINT);
 #endif
 
-    temp = readTemp(p);
-    rcTemp = temp * 0.0625;
+    localTemp = readLocalTemp(p);
+    rcLocalTemp = localTemp * 0.0625;
 
-//    if(p->samplingMode == POLL)                                         // (p->samplingMode == POLL [default])
-//    {
-//        readMagPOLL(p);
-//    }
-//    else                                                                // (p->samplingMode == CONTINUOUS)
-//    {
-//        readMagCMM(p);
-//    }
-      readMagPOLL(p);
+    remoteTemp = readRemoteTemp(p);
+    rcRemoteTemp = remoteTemp * 0.0625;
 
-    xyz[0] = (((double)p->XYZ[0] / p->NOSRegValue) / p->x_gain) * 1000; // make microTeslas -> nanoTeslas
-    xyz[1] = (((double)p->XYZ[1] / p->NOSRegValue) / p->y_gain) * 1000; // make microTeslas -> nanoTeslas
-    xyz[2] = (((double)p->XYZ[2] / p->NOSRegValue) / p->z_gain) * 1000; // make microTeslas -> nanoTeslas
+    readMagPOLL(p);
+
+//    xyz[0] = (((double)p->XYZ[0] / p->NOSRegValue) / p->x_gain) * 1000; // make microTeslas -> nanoTeslas
+//    xyz[1] = (((double)p->XYZ[1] / p->NOSRegValue) / p->y_gain) * 1000; // make microTeslas -> nanoTeslas
+//    xyz[2] = (((double)p->XYZ[2] / p->NOSRegValue) / p->z_gain) * 1000; // make microTeslas -> nanoTeslas
+
+    xyz[0] = (((double)p->XYZ[0] / p->NOSRegValue) / p->x_gain);
+    xyz[1] = (((double)p->XYZ[1] / p->NOSRegValue) / p->y_gain);
+    xyz[2] = (((double)p->XYZ[2] / p->NOSRegValue) / p->z_gain);
 
     snprintf(fmtBuf, fmtBuf_len, "{ ");
     strncat(outBuf, fmtBuf, strlen(fmtBuf));
 
     utcTime = getUTC();
 
-    strftime(utcStr, UTCBUFLEN, "%d %b %Y %T", utcTime);                // RFC 2822: "%a, %d %b %Y %T %z"      RFC 822: "%a, %d %b %y %T %z"
+#if(FOR_GRAPE2)
+    strftime(utcStr, UTCBUFLEN, "%Y%m%e%y%M%S", utcTime);              // YYYYMMDDHHMMSS  (Gaak!)
+    snprintf(fmtBuf, fmtBuf_len, "\"ts\":%s", utcStr);
+#else
+    strftime(utcStr, UTCBUFLEN, "%d %b %Y %T", utcTime);                // RFC 2822: "%a, %d %b %Y %T %z"
     snprintf(fmtBuf, fmtBuf_len, "\"ts\":\"%s\"", utcStr);
+#endif
+
     strncat(outBuf, fmtBuf, strlen(fmtBuf));
 
-    if(rcTemp < -100.0)
+    if(rcLocalTemp < -100.0)
+    {
+        snprintf(fmtBuf, fmtBuf_len, ", \"lt\":0.0");
+        strncat(outBuf, fmtBuf, strlen(fmtBuf));
+    }
+    else
+    {
+        snprintf(fmtBuf, fmtBuf_len, ", \"lt\":%.2f",  rcLocalTemp);
+        strncat(outBuf, fmtBuf, strlen(fmtBuf));
+    }
+
+    if(rcRemoteTemp < -100.0)
     {
         snprintf(fmtBuf, fmtBuf_len, ", \"rt\":0.0");
         strncat(outBuf, fmtBuf, strlen(fmtBuf));
     }
     else
     {
-        snprintf(fmtBuf, fmtBuf_len, ", \"rt\":%.2f",  rcTemp);
+        snprintf(fmtBuf, fmtBuf_len, ", \"rt\":%.2f",  rcRemoteTemp);
         strncat(outBuf, fmtBuf, strlen(fmtBuf));
     }
 
-    snprintf(fmtBuf, fmtBuf_len, ", \"x\":%.2f", xyz[0]);
+    snprintf(fmtBuf, fmtBuf_len, ", \"x\":%.3f", xyz[0]);
     strncat(outBuf, fmtBuf, strlen(fmtBuf));
-    snprintf(fmtBuf, fmtBuf_len, ", \"y\":%.2f", xyz[1]);
+    snprintf(fmtBuf, fmtBuf_len, ", \"y\":%.3f", xyz[1]);
     strncat(outBuf, fmtBuf, strlen(fmtBuf));
-    snprintf(fmtBuf, fmtBuf_len, ", \"z\":%.2f", xyz[2]);
+    snprintf(fmtBuf, fmtBuf_len, ", \"z\":%.3f", xyz[2]);
     strncat(outBuf, fmtBuf, strlen(fmtBuf));
 
     snprintf(fmtBuf, fmtBuf_len, " }\n");
@@ -374,19 +392,49 @@ char *formatOutput(volatile ctlList *p, char *outBuf)
 }
 
 //------------------------------------------
-// readTemp(volatile ctlList *p)
+// readLocalTemp(volatile ctlList *p)
 //------------------------------------------
-int readTemp(volatile ctlList *p)
+int readLocalTemp(volatile ctlList *p)
 {
     int temp = -9999;
     char data[2] = {0};
 
 #if(_DEBUG)
-    fprintf(OUTPUT_PRINT, "[Child]: readTemp()...\n");
+    fprintf(OUTPUT_PRINT, "[Child]: readLocalTemp()...\n");
     fflush(OUTPUT_PRINT);
 #endif
 
-    if((temp = i2c_read_i2c_block_data(p->pi, p->tempHandle, MCP9808_REG_AMBIENT_TEMP, data, 2) <= 0))
+    if((temp = i2c_read_i2c_block_data(p->pi, p->localTempHandle, MCP9808_REG_AMBIENT_TEMP, data, 2) <= 0))
+    {
+        fprintf(OUTPUT_ERROR, "Error : I/O error reading temp sensor at address: [0x%2X].\n", MCP9808_REG_AMBIENT_TEMP);
+        showPIGPIOErrMsg(temp);
+    }
+    else
+    {
+        // Convert the data to 13-bits
+        temp = ((data[0] & 0x1F) * 256 + data[1]);
+        if(temp > 4095)
+        {
+            temp -= 8192;
+        }
+    }
+    return temp;
+}
+
+//------------------------------------------
+// readRemoteTemp(volatile ctlList *p)
+//------------------------------------------
+int readRemoteTemp(volatile ctlList *p)
+{
+    int temp = -9999;
+    char data[2] = {0};
+
+#if(_DEBUG)
+    fprintf(OUTPUT_PRINT, "[Child]: readRemoteTemp()...\n");
+    fflush(OUTPUT_PRINT);
+#endif
+
+    if((temp = i2c_read_i2c_block_data(p->pi, p->remoteTempHandle, MCP9808_REG_AMBIENT_TEMP, data, 2) <= 0))
     {
         fprintf(OUTPUT_ERROR, "Error : I/O error reading temp sensor at address: [0x%2X].\n", MCP9808_REG_AMBIENT_TEMP);
         showPIGPIOErrMsg(temp);
@@ -460,10 +508,6 @@ int readMagPOLL(volatile ctlList *p)
     else if(rv == 0)
     {
         // Wait for DReady Flag.
-//        while((rv = (i2c_read_byte(p->pi, RM3100I2C_STATUS)) & RM3100I2C_READMASK) != RM3100I2C_READMASK)
-//        while((rv = (i2c_read_byte_data(p->pi, p->magHandle, RM3100I2C_STATUS)) & RM3100I2C_READMASK) != RM3100I2C_READMASK)
-//        while((rv = (i2c_read_byte_data(p->pi, p->magHandle, RM3100I2C_STATUS)) & RM3100I2C_READMASK) != RM3100I2C_READMASK)
-//        while((rv = i2c_read_device(p->pi, p->magHandle, xyzBuf, XYZ_BUFLEN)))
         rv = i2c_read_byte(p->pi, p->magHandle);
         rv = (rv & RM3100I2C_READMASK);
         while((rv != RM3100I2C_READMASK))
@@ -478,7 +522,8 @@ int readMagPOLL(volatile ctlList *p)
 #endif
 
         // Read the data registers.
-        rv = i2c_read_device(p->pi, p->magHandle, xyzBuf, XYZ_BUFLEN);
+        //rv = i2c_read_device(p->pi, p->magHandle, xyzBuf, XYZ_BUFLEN);
+        rv = i2c_read_i2c_block_data(p->pi, p->magHandle, RM3100I2C_XYZ, (char *)xyzBuf, XYZ_BUFLEN);
         if(rv == XYZ_BUFLEN)
         {
             p->XYZ[0] = ((signed char)xyzBuf[0]) * 256 * 256;
@@ -547,11 +592,11 @@ int verifyMagSensor(volatile ctlList *p)
             }
             else
             {
-#if(_DEBUG)
-                fprintf(OUTPUT_PRINT,"    [Child]: RM3100 Detected Properly: ");
-                fprintf(OUTPUT_PRINT,"REVID: %x.\n", p->magRevId);
-                fflush(OUTPUT_PRINT);
-#endif
+//#if(_DEBUG)
+//                fprintf(OUTPUT_PRINT,"    [Child]: RM3100 Detected Properly: ");
+//                fprintf(OUTPUT_PRINT,"REVID: %x.\n", p->magRevId);
+//                fflush(OUTPUT_PRINT);
+//#endif
                 return 0;
             }
         }
@@ -574,9 +619,9 @@ int verifyMagSensor(volatile ctlList *p)
 int setNOSReg(volatile ctlList *p)
 {
     int rv = 0;
-#if _DEBUG
-    fprintf(OUTPUT_PRINT, "    [Child]: In setNOSReg():: Setting undocumented NOS register to value: %2X\n", p->NOSRegValue);
-#endif
+//#if _DEBUG
+//    fprintf(OUTPUT_PRINT, "    [Child]: In setNOSReg():: Setting undocumented NOS register to value: %2X\n", p->NOSRegValue);
+//#endif
     return rv;
 }
 
@@ -634,22 +679,42 @@ int initGPIO(volatile ctlList *p)
     }
 
     //-----------------------------------------
-    // Register the Temp Sensor address.
+    // Register the Local Temp Sensor address.
     //-----------------------------------------
-    if((p->tempHandle = i2c_open(p->pi, (unsigned) RASPI_I2C_BUS1, (unsigned) MCP9808_RMT_I2CADDR_DEFAULT, (unsigned) 0) >= 0))
+    if((p->localTempHandle = i2c_open(p->pi, (unsigned) RASPI_I2C_BUS1, (unsigned) MCP9808_LCL_I2CADDR_DEFAULT, (unsigned) 0) >= 0))
     {
 #if _DEBUG
-        fprintf(OUTPUT_PRINT, "    [CHILD] i2c_open(MCP9808) OK. Handle: %i\n", p->tempHandle );
+        fprintf(OUTPUT_PRINT, "    [CHILD] i2c_open(MCP9808) OK. Handle: %i\n", p->localTempHandle );
         fflush(OUTPUT_PRINT);
 #endif
     }
     else
     {
 #if _DEBUG
-        fprintf(OUTPUT_PRINT, "    [CHILD] i2c_open(MCP9808) FAIL. Handle: %i\n", p->tempHandle );
+        fprintf(OUTPUT_PRINT, "    [CHILD] i2c_open(MCP9808) FAIL. Handle: %i\n", p->localTempHandle );
         fflush(OUTPUT_PRINT);
 #endif
-        showPIGPIOErrMsg(p->tempHandle);
+        showPIGPIOErrMsg(p->localTempHandle);
+        return -1;
+    }
+
+    //-----------------------------------------
+    // Register the Remote Temp Sensor address.
+    //-----------------------------------------
+    if((p->remoteTempHandle = i2c_open(p->pi, (unsigned) RASPI_I2C_BUS1, (unsigned) MCP9808_RMT_I2CADDR_DEFAULT, (unsigned) 0) >= 0))
+    {
+#if _DEBUG
+        fprintf(OUTPUT_PRINT, "    [CHILD] i2c_open(MCP9808) OK. Handle: %i\n", p->remoteTempHandle );
+        fflush(OUTPUT_PRINT);
+#endif
+    }
+    else
+    {
+#if _DEBUG
+        fprintf(OUTPUT_PRINT, "    [CHILD] i2c_open(MCP9808) FAIL. Handle: %i\n", p->remoteTempHandle );
+        fflush(OUTPUT_PRINT);
+#endif
+        showPIGPIOErrMsg(p->remoteTempHandle);
         return -1;
     }
 
@@ -663,7 +728,8 @@ void termGPIO(volatile ctlList *p)
 {
     // Knock down all of the pigpio setup here.
     p->magHandle = i2c_close(p->pi, p->magHandle);
-    p->tempHandle = i2c_close(p->pi, p->tempHandle);
+    p->localTempHandle = i2c_close(p->pi, p->localTempHandle);
+    p->remoteTempHandle = i2c_close(p->pi, p->remoteTempHandle);
     pigpio_stop(p->pi);
 
 #if(_DEBUG)
@@ -708,9 +774,9 @@ int initMagSensor(volatile ctlList *p)
 }
 
 //---------------------------------------------------------------
-// int initTempSensor(volatile ctlList *p)
+// int initTempSensors(volatile ctlList *p)
 //---------------------------------------------------------------
-int initTempSensor(volatile ctlList *p)
+int initTempSensors(volatile ctlList *p)
 {
     int rv = 0;
     // Temp sensor doesn't need any iniutialization currently.
